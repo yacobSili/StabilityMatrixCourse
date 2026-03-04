@@ -1,0 +1,16 @@
+# ACK 源码目录（不纳入本学习仓库）
+common/
+
+# 编辑器与系统
+.cursor/
+.vscode/
+*.suo
+*.user
+Thumbs.db
+.DS_Store
+
+# 临时与构建
+*.log
+*.tmp
+*.swp
+*~
