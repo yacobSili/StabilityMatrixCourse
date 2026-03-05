@@ -1,1 +1,0 @@
-我想知道binder driver中的binder_proc以及相关的数据结构存储在具体什么进程内。

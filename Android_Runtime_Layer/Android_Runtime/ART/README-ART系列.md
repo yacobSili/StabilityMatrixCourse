@@ -23,7 +23,7 @@
 出了问题我怎么查？怎么防？（诊断与治理）
 ```
 
-本系列按照这条逻辑链，分为三个篇章：
+本系列按照这条逻辑链，分为四个篇章：
 
 ---
 
@@ -141,14 +141,45 @@ JNI 是 Java 世界与 C++ 世界的边界，也是稳定性的"百慕大三角"
 
 ---
 
+## 第四篇章：生命周期与信号机制（2 篇）
+
+> 核心问题：ART 是如何被创建和启动的？ANR 时的堆栈 dump 是怎么工作的？
+
+### [09-信号机制与 ANR Trace：从 SIGQUIT 到 traces.txt 的完整链路](09-信号机制与ANR-Trace.md)
+
+| 章节 | 内容 | 核心源码路径 | 稳定性关联 |
+| :--- | :--- | :--- | :--- |
+| **1. SIGQUIT 的语义** | SIGQUIT 与致命信号的区别；JVM 的 `kill -3` 传统；ART 使用 `sigwait` 而非 `sigaction` 的原因 | — | 理解 ANR dump 与 Native Crash 信号的本质差异 |
+| **2. SignalCatcher 线程** | 创建时机（`Runtime::Start`）；信号掩码配置；`sigwait` 等待循环；同时处理 SIGQUIT 和 SIGUSR1 | `art/runtime/signal_catcher.cc` | SignalCatcher 未就绪时 SIGQUIT 导致进程异常退出 |
+| **3. ANR 完整链路** | AMS 四种超时场景（Input/Broadcast/Service/ContentProvider）→ `Process.sendSignal(SIGQUIT)` → SignalCatcher 响应 → `Runtime::DumpForSigQuit` | `frameworks/base/.../ProcessErrorStateRecord.java`、`art/runtime/runtime.cc` | ANR 检测机制与 dump 流程的完整打通 |
+| **4. 线程挂起机制** | `SuspendAll` 流程；SafePoint 三种模式（解释器 `TestAllFlags`/编译码 Polling Page/Native 返回检查）；挂起超时 abort | `art/runtime/thread_list.cc` | `Thread suspension timed out` 致命错误的根因与排查 |
+| **5. Java 栈 dump 实现** | `StackVisitor` 遍历 ShadowFrame/QuickFrame；`dex_pc` 到源码行号的映射 | `art/runtime/stack.cc`、`art/runtime/thread.cc` | ProGuard 行号丢失导致 trace 不可读 |
+| **6. traces.txt 格式解读** | 线程状态含义（Runnable/Blocked/Waiting/Native 等）；锁信息（held/waiting to lock）；关键字段（tid/sysTid/sCount/utm/stm） | `art/runtime/thread_state.h` | 通过 trace 精确定位 ANR 根因 |
+| **7. APM 的 SIGQUIT 利用与冲突** | FileObserver 监听、SIGQUIT 拦截、Watchdog 主动 dump 三种策略；与 SignalCatcher 的竞争关系 | — | APM ANR 监控方案的选型与风险评估 |
+
+### [10-ART 启动全流程：从 app_process 到第一行 Java 代码](10-ART启动全流程.md)
+
+| 章节 | 内容 | 核心源码路径 | 稳定性关联 |
+| :--- | :--- | :--- | :--- |
+| **1. 从 init 到 Zygote** | `init.rc` 中 Zygote 的定义；`app_process` 的 `main()` 入口；参数解析 | `system/core/rootdir/init.zygote64_32.rc`、`frameworks/base/cmds/app_process/app_main.cpp` | Zygote 崩溃的影响面（连带重启 audio/camera/media） |
+| **2. AndroidRuntime::start()** | `startVm()`（读取 `dalvik.vm.*` 配置 → `JNI_CreateJavaVM`）；`startReg()`（注册 Framework JNI）；`ZygoteInit.main()` 调用 | `frameworks/base/core/jni/AndroidRuntime.cpp` | `dalvik.vm.*` 系统属性的调优影响 |
+| **3. Runtime::Init 详解** | 12 个子系统的初始化顺序：MemMap → ThreadList → Thread::Attach → Heap → Monitor → ClassLinker → FaultHandler → BlockSignals → JIT | `art/runtime/runtime.cc` | 初始化顺序与依赖关系；任何一步失败 = Zygote 崩溃 |
+| **4. Runtime::Start** | Boot Image（`boot.art`）加载；`StartDaemonThreads()`（4 个守护线程）；`SignalCatcher` 创建 | `art/runtime/runtime.cc` | Boot Image 损坏 → 系统 bootloop |
+| **5. ZygoteInit.main()** | `preloadClasses()`（7000+ 核心类）；`preloadResources()`（Framework 资源）；`gcAndFinalize()`（fork 前清理）；`forkSystemServer()` | `frameworks/base/core/java/com/android/internal/os/ZygoteInit.java` | 预加载类 `<clinit>` 异常 → Zygote 崩溃；COW 内存共享原理 |
+| **6. fork 后的世界** | `PreZygoteFork()`（暂停 GC/JIT）；`DidForkFromZygote()`（重建 SignalCatcher/GC 线程/JIT 线程池/Main Space）；子系统状态对比表 | `art/runtime/runtime.cc` | JIT 冷启动影响前几次启动耗时；SignalCatcher 重建窗口期 |
+| **7. 稳定性风险地图** | Boot Image 损坏、预加载类初始化失败、fork 后 SignalCatcher 未就绪、FinalizerWatchdog 超时 | — | 启动阶段常见 Crash 的定位与修复 |
+
+---
+
 ## 阅读建议
 
 **如果你时间有限，优先阅读：**
 1.  **01 总览** — 建立全局观，这是所有后续文章的地基。
 2.  **05 内存与 GC** — OOM 是稳定性的头号敌人，这是实战价值最高的一篇。
 3.  **06 JNI** — Native Crash 的高发区，架构师必须掌握。
+4.  **09 信号机制与 ANR Trace** — ANR 排查的核心知识，理解 traces.txt 的底层原理。
 
-**如果你要系统学习，按顺序阅读 01 → 08。** 每篇文章的设计逻辑是：
+**如果你要系统学习，按顺序阅读 01 → 10。** 每篇文章的设计逻辑是：
 ```
 背景与定义（是什么、为什么）
     → 架构与交互（在哪里、和谁打交道）
