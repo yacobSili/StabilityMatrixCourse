@@ -774,6 +774,8 @@ GC Root: Thread "main"
 
 关键发现：有一个 `Message` 被设置为 5 分钟后执行（`Handler.sendMessageDelayed(msg, 300_000)`），在 Activity finish 之后，这条消息仍然在 MessageQueue 中等待，其 `target` 引用了一个非静态内部类 Handler，进而引用了已销毁的 Activity 及其所有成员变量。
 
+**为何会泄露？** 容易产生的误解是：「Handler 是 Activity 的成员，Activity 销毁时 Handler 自然就销毁，引用就断了。」实际上泄露时的引用方向恰恰相反：**MessageQueue（主线程，与进程同寿）→ 队列里的 Message → Message.target（你的 Handler）→ Handler 的 this$0（非静态内部类隐式持有 Activity）→ Activity**。Activity 调用 `finish()` 后，没有任何逻辑会自动把这条尚未触发的 Message 从主线程的 MessageQueue 里移除，因此只要 Message 还在队列里，Handler 就被强引用着、无法被 GC，Handler 又强引用着 Activity，所以 Activity 也无法被回收。也就是说：不是「Handler 销毁了 Activity 才销毁」，而是「Message 一直不丢，Handler 就一直活着，Activity 就永远达不到可回收状态」。
+
 **根因：**
 
 问题代码使用了匿名内部类 Handler + 长延迟消息：
@@ -802,7 +804,7 @@ public class MainActivity extends AppCompatActivity {
 
 引用链：`MessageQueue → Message(delayed 5min) → Handler(匿名内部类) → MainActivity → 所有 View 和 Bitmap`
 
-如果用户在 5 分钟内多次进出该 Activity，每次都会新建 Activity 实例和延迟消息，旧的 Activity 无法被回收 → 内存持续增长 → OOM。
+**单次进入 vs 多次进出：** 若用户只进入一次该 Activity 然后 finish，5 分钟后这条消息被 Looper 取出并执行完毕，Message 不再被队列引用，Handler 和 Activity 随后都可被 GC，严格说是「延迟约 5 分钟释放」而非永久泄露。真正导致 OOM 的是**在延迟时间内反复进入、退出**：每次进入都会新建一个 Activity 实例并再发一条 5 分钟延迟消息，而之前发出的消息仍在队列里，对应的旧 Activity 仍被引用无法回收，多颗已 finish 的 Activity 同时在内存中堆积（且每颗可能持有 Bitmap、Adapter 等），内存持续增长直至 OOM。因此：单次顶多是 5 分钟内不释放；多次进出则会在同一时段内积压多实例，形成泄露导致的 OOM。
 
 **修复：**
 

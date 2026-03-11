@@ -408,7 +408,7 @@ ANR trace 中主线程的堆栈不在 `nativePollOnce()`，而是在业务代码
 
 **为什么会有性能问题**
 
-每次 `enqueueMessage()` 插入到队列头部时，都会调用 `nativeWake()`：
+每次 `enqueueMessage()` 插入到队列**头部时**，都会调用 `nativeWake()`：
 
 ```java
 // frameworks/base/core/java/android/os/MessageQueue.java
@@ -517,7 +517,7 @@ ANR trace 显示主线程在 `nativePollOnce()`——看起来像是消息队列
 
 **诊断方法**
 
-通过 `dumpsys activity` 或 `adb shell dumpsys activity processes` 查看 MessageQueue 状态：
+必须通过`adb shell dumpsys activity pkgname` 查看应用进程目标package下 MessageQueue 状态：
 
 ```
 Message Queue (has barrier):    ← 关键标志！
