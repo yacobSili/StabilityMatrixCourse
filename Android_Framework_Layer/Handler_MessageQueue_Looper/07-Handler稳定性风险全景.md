@@ -526,7 +526,10 @@ Message Queue (has barrier):    ← 关键标志！
   Message 2: { when=-6s what=0 target=MyHandler }   ← 被阻塞的同步消息
   ... (更多被阻塞的消息)
 ```
+![img_1.png](img_1.png)
 
+所以在dumpsys的时候如果，队列中有同步屏障，那么就可以直接看到。所以ANR得时候，应该通过`dumpsys activity com.android.chrome > dumppkg.txt`
+dumpsys应用进程的队列。
 如果在 ANR trace 中看到 `nativePollOnce` 但 `dumpsys` 显示 `has barrier` 加上大量 pending 消息，基本确认是屏障泄漏。
 
 **稳定性关联：** 同步屏障泄漏是最难排查的 Handler 问题之一。它通常出现在自定义 View 动画、反射调用 `ViewRootImpl` 内部方法、或三方 SDK 操作渲染流水线的场景中。修复的核心是**确保 `postSyncBarrier()` 和 `removeSyncBarrier()` 严格配对**，并在异常路径（Fragment detach、Activity finish、异常抛出）中添加清理逻辑。
@@ -645,7 +648,16 @@ protected void onDestroy() {
 ```
 
 **稳定性关联：** 由于 Java Lambda / 方法引用在捕获 `this` 时等同于匿名内部类，仅靠语法糖无法消除泄漏。关键在于 **onDestroy 中调用 `removeCallbacksAndMessages(null)`**。
-
+```java
+    /**
+     * Remove any pending posts of callbacks and sent messages whose
+     * <var>obj</var> is <var>token</var>.  If <var>token</var> is null,
+     * all callbacks and messages will be removed.
+     */
+    public final void removeCallbacksAndMessages(@Nullable Object token) {
+        mQueue.removeCallbacksAndMessages(this, disallowNullArgumentIfShared(token));
+    }
+```
 ---
 
 ## 4. HandlerThread 生命周期管理

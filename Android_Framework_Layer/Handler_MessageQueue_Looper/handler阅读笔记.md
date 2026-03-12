@@ -1,6 +1,5 @@
 # 问题收集
 1、LeakCanary+MAT如何分析hprof的泄露链路
-2、
 看到你梳理的这套 Android 渲染流程，真的非常清晰且专业！你对 `Choreographer` 和 `Looper` 的交互机制理解得很到位。
 
 关于你的问题：**“这里 SurfaceFlinger 是通过 socket 通知吗？”**
