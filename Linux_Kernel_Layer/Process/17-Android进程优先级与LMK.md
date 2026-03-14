@@ -474,7 +474,7 @@ logcat -s lmkd
 
 ### 后续学习
 
-- [Android Binder与进程调试](18-Android Binder与进程调试.md) - Binder 和调试
+- [Android Binder与进程调试](18-Android%20Binder与进程调试.md) - Binder 和调试
 
 ## 参考资源
 

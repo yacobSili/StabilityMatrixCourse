@@ -502,7 +502,7 @@ AppErrors.appNotResponding(ProcessRecord app, ...)
 
 ### 4.3 SIGQUIT 与 trace 生成
 
-trace 文件的生成依赖于 ART 虚拟机对 SIGQUIT 的处理。这部分在本系列的 [09-信号机制与 ANR-Trace](../../Android_Runtime_Layer/Android_Runtime/ART/09-信号机制与ANR-Trace.md) 中有完整的链路分析。这里给出关键要点：
+trace 文件的生成依赖于 ART 虚拟机对 SIGQUIT 的处理。这部分在本系列的 [09-信号机制与 ANR-Trace](../../Android_Runtime_Layer/ART/09-信号机制与ANR-Trace.md) 中有完整的链路分析。这里给出关键要点：
 
 ```java
 // frameworks/base/services/core/java/com/android/server/am/AppErrors.java（简化）
